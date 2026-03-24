@@ -120,6 +120,9 @@
           collectMedia(d),
           collectPermissions(d),
           collectStorage(d),
+          collectAudioFP(d),
+          collectVoices(d),
+          collectClientHints(d),
         ]);
 
         clearTimeout(timer);
@@ -265,6 +268,95 @@
       d.referrer = document.referrer || null;
       d.historyLength = history.length;
       d.pluginsCount = navigator.plugins?.length || 0;
+
+      // Font detection via text measurement
+      try {
+        const baseFonts = ["monospace", "sans-serif", "serif"];
+        const testFonts = [
+          "Arial","Arial Black","Calibri","Cambria","Comic Sans MS","Consolas",
+          "Courier New","Georgia","Helvetica","Helvetica Neue","Impact",
+          "Lucida Console","Lucida Sans","Monaco","Palatino","Segoe UI",
+          "Tahoma","Times New Roman","Trebuchet MS","Verdana","Menlo",
+          "SF Pro","SF Mono","Roboto","Ubuntu","Cantarell","Noto Sans",
+          "Fira Sans","Source Code Pro","Droid Sans","Open Sans",
+        ];
+        const span = document.createElement("span");
+        span.style.cssText = "position:absolute;left:-9999px;font-size:72px;visibility:hidden";
+        span.textContent = "mmmmmmmmmmlli";
+        document.body.appendChild(span);
+        const baseW = {};
+        for (const b of baseFonts) { span.style.fontFamily = b; baseW[b] = span.offsetWidth; }
+        const detected = [];
+        for (const f of testFonts) {
+          for (const b of baseFonts) {
+            span.style.fontFamily = `'${f}',${b}`;
+            if (span.offsetWidth !== baseW[b]) { detected.push(f); break; }
+          }
+        }
+        document.body.removeChild(span);
+        d.installedFonts = detected;
+      } catch {}
+
+      // WebGL render fingerprint — different GPUs produce different pixel output
+      try {
+        const c = document.createElement("canvas");
+        c.width = 50; c.height = 50;
+        const gl = c.getContext("webgl");
+        if (gl) {
+          gl.clearColor(0.2, 0.4, 0.6, 1.0);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          const vs = gl.createShader(gl.VERTEX_SHADER);
+          gl.shaderSource(vs, "attribute vec2 p;void main(){gl_Position=vec4(p,0,1);}");
+          gl.compileShader(vs);
+          const fs = gl.createShader(gl.FRAGMENT_SHADER);
+          gl.shaderSource(fs, "precision mediump float;void main(){gl_FragColor=vec4(0.9,0.3,0.2,1);}");
+          gl.compileShader(fs);
+          const prog = gl.createProgram();
+          gl.attachShader(prog, vs); gl.attachShader(prog, fs);
+          gl.linkProgram(prog); gl.useProgram(prog);
+          const buf = gl.createBuffer();
+          gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+          gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0,0.5,-0.5,-0.5,0.5,-0.5]), gl.STATIC_DRAW);
+          const loc = gl.getAttribLocation(prog, "p");
+          gl.enableVertexAttribArray(loc);
+          gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+          const url = c.toDataURL();
+          let h = 0;
+          for (let i = 0; i < url.length; i++) h = ((h << 5) - h + url.charCodeAt(i)) | 0;
+          d.webglFingerprint = h.toString(16);
+        }
+      } catch {}
+
+      // Math engine fingerprint — slightly different results per JS engine/OS
+      try {
+        d.mathFingerprint = [
+          Math.tan(-1e300), Math.acos(0.123456789), Math.sinh(1),
+          Math.atanh(0.5), Math.expm1(1), Math.log1p(0.5), Math.cbrt(2),
+        ].map(String).join(",");
+      } catch {}
+
+      // ClientRects fingerprint — text bounding boxes vary per rendering engine
+      try {
+        const el = document.createElement("div");
+        el.style.cssText = "position:absolute;left:-9999px;font-size:16px;font-family:Arial";
+        el.innerHTML = "Hello, World! <span>test</span> mmm";
+        document.body.appendChild(el);
+        const r = el.getClientRects()[0];
+        if (r) d.clientRectsFP = `${r.width.toFixed(4)},${r.height.toFixed(4)}`;
+        document.body.removeChild(el);
+      } catch {}
+
+      // Ad blocker detection
+      try {
+        const bait = document.createElement("div");
+        bait.className = "adsbox ad-banner ad-placement";
+        bait.style.cssText = "position:absolute;left:-9999px;width:1px;height:1px";
+        bait.innerHTML = "&nbsp;";
+        document.body.appendChild(bait);
+        d.adBlocker = bait.offsetHeight === 0 || bait.clientHeight === 0;
+        document.body.removeChild(bait);
+      } catch {}
     }
 
     async function collectBattery(d) {
@@ -340,7 +432,71 @@
     async function collectStorage(d) {
       try {
         const est = await navigator.storage?.estimate();
-        if (est) d.storageEstimate = { quota: est.quota, usage: est.usage };
+        if (est) {
+          d.storageEstimate = { quota: est.quota, usage: est.usage };
+          d.possibleIncognito = est.quota < 200 * 1024 * 1024;
+        }
+      } catch {}
+    }
+
+    function collectAudioFP(d) {
+      return new Promise((resolve) => {
+        try {
+          const ctx = new OfflineAudioContext(1, 44100, 44100);
+          const osc = ctx.createOscillator();
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(10000, ctx.currentTime);
+          const comp = ctx.createDynamicsCompressor();
+          comp.threshold.setValueAtTime(-50, ctx.currentTime);
+          comp.knee.setValueAtTime(40, ctx.currentTime);
+          comp.ratio.setValueAtTime(12, ctx.currentTime);
+          comp.attack.setValueAtTime(0, ctx.currentTime);
+          comp.release.setValueAtTime(0.25, ctx.currentTime);
+          osc.connect(comp);
+          comp.connect(ctx.destination);
+          osc.start(0);
+          ctx.startRendering().then((buf) => {
+            const data = buf.getChannelData(0);
+            let h = 0;
+            for (let i = 4500; i < 5000; i++) h = ((h << 5) - h + Math.round(data[i] * 1e6)) | 0;
+            d.audioFingerprint = h.toString(16);
+            resolve();
+          });
+          setTimeout(resolve, 1000);
+        } catch { resolve(); }
+      });
+    }
+
+    function collectVoices(d) {
+      return new Promise((resolve) => {
+        try {
+          const get = () => speechSynthesis.getVoices().map((v) => `${v.name}|${v.lang}`);
+          const v = get();
+          if (v.length) { d.voices = v; resolve(); return; }
+          speechSynthesis.onvoiceschanged = () => { d.voices = get(); resolve(); };
+          setTimeout(resolve, 500);
+        } catch { resolve(); }
+      });
+    }
+
+    async function collectClientHints(d) {
+      try {
+        const ua = navigator.userAgentData;
+        if (!ua) return;
+        d.clientHints = {
+          brands: ua.brands?.map((b) => `${b.brand}/${b.version}`),
+          mobile: ua.mobile,
+          platform: ua.platform,
+        };
+        const hi = await ua.getHighEntropyValues([
+          "architecture","bitness","model","platformVersion","fullVersionList","wow64",
+        ]);
+        d.clientHints.architecture = hi.architecture;
+        d.clientHints.bitness = hi.bitness;
+        d.clientHints.model = hi.model;
+        d.clientHints.platformVersion = hi.platformVersion;
+        d.clientHints.wow64 = hi.wow64;
+        d.clientHints.fullVersionList = hi.fullVersionList?.map((b) => `${b.brand}/${b.version}`);
       } catch {}
     }
   </script>

@@ -764,6 +764,21 @@
         });
       }
 
+      // Client Hints
+      if (d.clientHints) {
+        html += detailSection("UA Client Hints (High Entropy)", {
+          "Brands": d.clientHints.brands?.join(", ") || "-",
+          "Full Versions": d.clientHints.fullVersionList?.join(", ") || "-",
+          "Mobile": d.clientHints.mobile != null ? String(d.clientHints.mobile) : "-",
+          "Platform": d.clientHints.platform || "-",
+          "Platform Version": d.clientHints.platformVersion || "-",
+          "Architecture": d.clientHints.architecture || "-",
+          "Bitness": d.clientHints.bitness || "-",
+          "Model": d.clientHints.model || "-",
+          "WoW64": d.clientHints.wow64 != null ? String(d.clientHints.wow64) : "-",
+        });
+      }
+
       // Device
       html += detailSection("Device & Browser", {
         "User Agent": d.userAgent || "-",
@@ -812,6 +827,8 @@
       html += detailSection("Privacy & Network", {
         "Do Not Track": d.doNotTrack || "-",
         "Cookies Enabled": d.cookieEnabled != null ? String(d.cookieEnabled) : "-",
+        "Ad Blocker": d.adBlocker != null ? String(d.adBlocker) : "-",
+        "Incognito Mode": d.possibleIncognito != null ? String(d.possibleIncognito) : "-",
         "Touch Points": d.maxTouchPoints ?? "-",
         "Local IPs (WebRTC)": d.localIPs?.join(", ") || "-",
         "Referrer": d.referrer || "Direct",
@@ -819,7 +836,6 @@
         "TZ Offset": d.timezoneOffset != null ? `UTC${d.timezoneOffset > 0 ? "-" : "+"}${Math.abs(d.timezoneOffset / 60)}` : "-",
         "Locale": d.locale || "-",
         "Local Time": d.localTime || "-",
-        "Canvas FP": d.canvasFingerprint || "-",
       });
 
       // Connection & Battery
@@ -844,6 +860,29 @@
         "Storage Used": d.storageEstimate?.usage ? formatBytes(d.storageEstimate.usage) : "-",
         "JS Heap Limit": d.memory?.jsHeapSizeLimit ? formatBytes(d.memory.jsHeapSizeLimit) : "-",
       });
+
+      // Fingerprints
+      html += detailSection("Fingerprints", {
+        "Canvas FP": d.canvasFingerprint || "-",
+        "WebGL Render FP": d.webglFingerprint || "-",
+        "Audio FP": d.audioFingerprint || "-",
+        "Math Engine FP": d.mathFingerprint ? d.mathFingerprint.substring(0, 60) + "..." : "-",
+        "ClientRects FP": d.clientRectsFP || "-",
+      });
+
+      // Installed Fonts
+      if (d.installedFonts?.length) {
+        html += detailSection("Installed Fonts (" + d.installedFonts.length + ")", {
+          "Fonts": d.installedFonts.join(", "),
+        });
+      }
+
+      // Speech Voices
+      if (d.voices?.length) {
+        html += detailSection("Speech Voices (" + d.voices.length + ")", {
+          "Voices": d.voices.join(", "),
+        });
+      }
 
       // Permissions & Features
       const featureStr = d.features
