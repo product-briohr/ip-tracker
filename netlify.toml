@@ -10,3 +10,9 @@
   to = "/collect.html"
   status = 200
   force = true
+
+[[redirects]]
+  from = "/g/*"
+  to = "/game.html"
+  status = 200
+  force = true

