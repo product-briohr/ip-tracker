@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IP Tracker</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      --bg: #09090b;
+      --surface: #111113;
+      --surface-2: #18181b;
+      --border: #27272a;
+      --text: #fafafa;
+      --text-muted: #a1a1aa;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius: 10px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    input, button, select, textarea { font-family: inherit; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); }
+
+    /* Login */
+    .login-overlay {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+    }
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2.5rem;
+      width: 100%; max-width: 380px;
+      text-align: center;
+    }
+    .login-card h1 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .login-card p {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-bottom: 1.5rem;
+    }
+    .login-card input {
+      width: 100%;
+      padding: 0.7rem 1rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.95rem;
+      margin-bottom: 1rem;
+      outline: none;
+    }
+    .login-card input:focus { border-color: var(--accent); }
+
+    /* Buttons */
+    .btn {
+      padding: 0.6rem 1.2rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      width: 100%;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.8rem; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover { opacity: 0.85; }
+
+    /* Layout */
+    .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    header h1 { font-size: 1.2rem; }
+    .header-right { display: flex; gap: 0.75rem; align-items: center; }
+
+    /* Stats */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.2rem;
+    }
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      display: block;
+    }
+    .stat-label {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .card h2 {
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+    }
+
+    /* Create link form */
+    .form-row {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .form-row input {
+      flex: 1;
+      padding: 0.65rem 1rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.9rem;
+      outline: none;
+    }
+    .form-row input:focus { border-color: var(--accent); }
+
+    /* Links table */
+    .link-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .link-item:hover { background: var(--surface-2); }
+    .link-info { flex: 1; min-width: 0; }
+    .link-name { font-weight: 600; margin-bottom: 0.25rem; }
+    .link-url {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 400px;
+    }
+    .link-meta {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .link-clicks {
+      background: var(--accent);
+      color: #fff;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .link-actions { display: flex; gap: 0.4rem; }
+
+    /* Result banner */
+    .result-banner {
+      display: none;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.8rem 1rem;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    .result-banner.show { display: flex; }
+    .result-url {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--accent);
+      word-break: break-all;
+      flex: 1;
+    }
+
+    /* Detail view */
+    .detail-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .detail-header h2 { flex: 1; }
+    .back-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-muted); font-size: 1.5rem;
+      padding: 0.25rem;
+    }
+    .back-btn:hover { color: var(--text); }
+
+    /* Map */
+    #map {
+      width: 100%;
+      height: 350px;
+      border-radius: var(--radius);
+      margin-bottom: 1.5rem;
+      border: 1px solid var(--border);
+    }
+    .leaflet-container { background: #1a1a2e; }
+
+    /* Visit cards */
+    .visit-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+      overflow: hidden;
+    }
+    .visit-summary {
+      display: flex;
+      align-items: center;
+      padding: 0.85rem 1rem;
+      cursor: pointer;
+      transition: background 0.15s;
+      gap: 1rem;
+    }
+    .visit-summary:hover { background: var(--surface-2); }
+    .visit-time { color: var(--text-muted); font-size: 0.8rem; min-width: 140px; }
+    .visit-location { flex: 1; font-size: 0.9rem; }
+    .visit-device { color: var(--text-muted); font-size: 0.8rem; max-width: 250px; text-align: right; }
+    .visit-ip {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      color: var(--accent);
+      min-width: 120px;
+    }
+    .vpn-badge {
+      background: var(--warning);
+      color: #000;
+      font-size: 0.65rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-weight: 600;
+      margin-left: 0.5rem;
+    }
+    .visit-detail {
+      display: none;
+      padding: 1rem;
+      background: var(--surface-2);
+      border-top: 1px solid var(--border);
+    }
+    .visit-detail.open { display: block; }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
+    }
+    .detail-section h4 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      margin-bottom: 0.6rem;
+      padding-bottom: 0.3rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.25rem 0;
+      font-size: 0.82rem;
+    }
+    .detail-key { color: var(--text-muted); }
+    .detail-val {
+      text-align: right;
+      max-width: 60%;
+      word-break: break-all;
+    }
+    .raw-json {
+      margin-top: 1rem;
+    }
+    .raw-json summary {
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+    .raw-json pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.75rem;
+      margin-top: 0.5rem;
+      font-size: 0.75rem;
+      overflow-x: auto;
+      max-height: 400px;
+      overflow-y: auto;
+      color: var(--text-muted);
+    }
+
+    /* Empty state */
+    .empty {
+      text-align: center;
+      padding: 3rem;
+      color: var(--text-muted);
+    }
+    .empty-icon { font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.5; }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1.25rem;
+      font-size: 0.85rem;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 9999;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+
+    .hidden { display: none !important; }
+    .loading-text { color: var(--text-muted); text-align: center; padding: 2rem; }
+
+    @media (max-width: 640px) {
+      .form-row { flex-direction: column; }
+      .link-item { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+      .link-meta { width: 100%; justify-content: space-between; }
+      .visit-summary { flex-wrap: wrap; }
+      .detail-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Login -->
+  <div class="login-overlay" id="loginScreen">
+    <div class="login-card">
+      <h1>IP Tracker</h1>
+      <p>Enter your admin password to continue</p>
+      <input type="password" id="passwordInput" placeholder="Password" onkeydown="if(event.key==='Enter')login()">
+      <button class="btn btn-primary" onclick="login()">Login</button>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="app" class="hidden">
+    <header>
+      <h1>IP Tracker</h1>
+      <div class="header-right">
+        <span style="color:var(--text-muted);font-size:0.8rem" id="linkCountBadge"></span>
+        <button class="btn btn-ghost btn-sm" onclick="logout()">Logout</button>
+      </div>
+    </header>
+
+    <div class="container">
+      <!-- Dashboard View -->
+      <div id="dashboardView">
+        <div class="stats-grid" style="margin-top:1.5rem">
+          <div class="stat-card">
+            <span class="stat-value" id="statLinks">-</span>
+            <span class="stat-label">Links</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value" id="statVisits">-</span>
+            <span class="stat-label">Total Clicks</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value" id="statUniqueIPs">-</span>
+            <span class="stat-label">Unique IPs</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value" id="statCountries">-</span>
+            <span class="stat-label">Countries</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Create Tracking Link</h2>
+          <div class="form-row">
+            <input type="url" id="destInput" placeholder="Paste Google Maps URL (or any URL)...">
+            <input type="text" id="nameInput" placeholder="Link name (optional)" style="max-width:200px">
+            <button class="btn btn-primary" style="width:auto;white-space:nowrap" onclick="createLink()">Create</button>
+          </div>
+          <div class="result-banner" id="resultBanner">
+            <span class="result-url" id="resultUrl"></span>
+            <button class="btn btn-ghost btn-sm" onclick="copyResult()">Copy</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Your Links</h2>
+          <div id="linksContainer">
+            <div class="loading-text">Loading links...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Link Detail View -->
+      <div id="detailView" class="hidden">
+        <div class="detail-header">
+          <button class="back-btn" onclick="showDashboard()">&larr;</button>
+          <h2 id="detailTitle">Link Details</h2>
+          <button class="btn btn-ghost btn-sm" onclick="exportVisits()">Export JSON</button>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-value" id="detailClicks">0</span>
+            <span class="stat-label">Total Clicks</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value" id="detailUniqueIPs">0</span>
+            <span class="stat-label">Unique IPs</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value" id="detailCountries">0</span>
+            <span class="stat-label">Countries</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value" id="detailDevices">0</span>
+            <span class="stat-label">Unique Devices</span>
+          </div>
+        </div>
+
+        <div id="map"></div>
+
+        <div class="card">
+          <h2>Visits</h2>
+          <div id="visitsContainer">
+            <div class="loading-text">Loading visits...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    let token = sessionStorage.getItem("tracker_token") || "";
+    let allLinks = [];
+    let currentVisits = [];
+    let map = null;
+    let markersLayer = null;
+
+    if (token) {
+      verifyAndLoad();
+    }
+
+    async function login() {
+      const pw = document.getElementById("passwordInput").value;
+      if (!pw) return;
+      token = pw;
+      sessionStorage.setItem("tracker_token", token);
+      await verifyAndLoad();
+    }
+
+    async function verifyAndLoad() {
+      try {
+        const res = await api("/api/get-links");
+        if (res.ok) {
+          document.getElementById("loginScreen").classList.add("hidden");
+          document.getElementById("app").classList.remove("hidden");
+          allLinks = await res.json();
+          renderDashboard();
+        } else {
+          sessionStorage.removeItem("tracker_token");
+          token = "";
+          document.getElementById("loginScreen").classList.remove("hidden");
+          document.getElementById("app").classList.add("hidden");
+          if (res.status === 401) toast("Invalid password");
+        }
+      } catch (e) {
+        toast("Connection error");
+      }
+    }
+
+    function logout() {
+      sessionStorage.removeItem("tracker_token");
+      token = "";
+      document.getElementById("loginScreen").classList.remove("hidden");
+      document.getElementById("app").classList.add("hidden");
+    }
+
+    function api(url, opts = {}) {
+      return fetch(url, {
+        ...opts,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...opts.headers },
+      });
+    }
+
+    function renderDashboard() {
+      const totalVisits = allLinks.reduce((s, l) => s + l.visitCount, 0);
+      document.getElementById("statLinks").textContent = allLinks.length;
+      document.getElementById("statVisits").textContent = totalVisits;
+      document.getElementById("linkCountBadge").textContent = `${allLinks.length} links`;
+
+      document.getElementById("statUniqueIPs").textContent = "-";
+      document.getElementById("statCountries").textContent = "-";
+
+      const container = document.getElementById("linksContainer");
+      if (!allLinks.length) {
+        container.innerHTML = `<div class="empty"><div class="empty-icon">&#128279;</div><p>No tracking links yet. Create one above.</p></div>`;
+        return;
+      }
+
+      container.innerHTML = allLinks
+        .map(
+          (l) => `
+        <div class="link-item" onclick="viewLink('${l.id}')">
+          <div class="link-info">
+            <div class="link-name">${esc(l.name)}</div>
+            <div class="link-url">${esc(l.destination)}</div>
+          </div>
+          <div class="link-meta">
+            <span style="color:var(--text-muted);font-size:0.75rem">${timeAgo(l.createdAt)}</span>
+            <span class="link-clicks">${l.visitCount} clicks</span>
+            <div class="link-actions" onclick="event.stopPropagation()">
+              <button class="btn btn-ghost btn-sm" onclick="copyTrackingUrl('${l.id}')">Copy</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteLink('${l.id}')">Del</button>
+            </div>
+          </div>
+        </div>`
+        )
+        .join("");
+    }
+
+    async function createLink() {
+      const dest = document.getElementById("destInput").value.trim();
+      const name = document.getElementById("nameInput").value.trim();
+      if (!dest) { toast("Enter a destination URL"); return; }
+
+      try {
+        const res = await api("/api/create-link", {
+          method: "POST",
+          body: JSON.stringify({ destination: dest, name }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById("resultUrl").textContent = data.trackingUrl;
+          document.getElementById("resultBanner").classList.add("show");
+          document.getElementById("destInput").value = "";
+          document.getElementById("nameInput").value = "";
+          allLinks.unshift({ id: data.id, destination: dest, name: data.name, createdAt: data.createdAt, visitCount: 0 });
+          renderDashboard();
+          toast("Link created!");
+        } else {
+          toast(data.error || "Failed to create link");
+        }
+      } catch (e) {
+        toast("Error creating link");
+      }
+    }
+
+    function copyResult() {
+      const url = document.getElementById("resultUrl").textContent;
+      navigator.clipboard.writeText(url);
+      toast("Copied to clipboard!");
+    }
+
+    function copyTrackingUrl(id) {
+      const url = `${window.location.origin}/r/${id}`;
+      navigator.clipboard.writeText(url);
+      toast("Tracking URL copied!");
+    }
+
+    async function deleteLink(id) {
+      if (!confirm("Delete this link and all its visit data?")) return;
+      try {
+        await api(`/api/delete-link?id=${id}`, { method: "DELETE" });
+        allLinks = allLinks.filter((l) => l.id !== id);
+        renderDashboard();
+        toast("Link deleted");
+      } catch (e) {
+        toast("Error deleting link");
+      }
+    }
+
+    async function viewLink(id) {
+      document.getElementById("dashboardView").classList.add("hidden");
+      document.getElementById("detailView").classList.remove("hidden");
+      document.getElementById("visitsContainer").innerHTML = '<div class="loading-text">Loading visits...</div>';
+
+      try {
+        const res = await api(`/api/get-visits?id=${id}`);
+        const data = await res.json();
+        currentVisits = data.visits || [];
+
+        document.getElementById("detailTitle").textContent = data.name || "Link Details";
+
+        const uniqueIPs = new Set(currentVisits.map((v) => v.ip));
+        const countries = new Set(currentVisits.map((v) => v.geo?.country).filter(Boolean));
+        const devices = new Set(currentVisits.map((v) => v.device?.canvasFingerprint).filter(Boolean));
+
+        document.getElementById("detailClicks").textContent = currentVisits.length;
+        document.getElementById("detailUniqueIPs").textContent = uniqueIPs.size;
+        document.getElementById("detailCountries").textContent = countries.size;
+        document.getElementById("detailDevices").textContent = devices.size || "-";
+
+        initMap(currentVisits);
+        renderVisits(currentVisits);
+      } catch (e) {
+        document.getElementById("visitsContainer").innerHTML =
+          '<div class="empty">Failed to load visits</div>';
+      }
+    }
+
+    function showDashboard() {
+      document.getElementById("detailView").classList.add("hidden");
+      document.getElementById("dashboardView").classList.remove("hidden");
+      if (map) { map.remove(); map = null; }
+      verifyAndLoad();
+    }
+
+    function initMap(visits) {
+      if (map) { map.remove(); map = null; }
+
+      map = L.map("map", { zoomControl: true }).setView([20, 0], 2);
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+        maxZoom: 19,
+      }).addTo(map);
+
+      markersLayer = L.layerGroup().addTo(map);
+      const bounds = [];
+
+      visits.forEach((v) => {
+        let lat = v.geo?.lat || v.device?.geolocation?.latitude;
+        let lon = v.geo?.lon || v.device?.geolocation?.longitude;
+        if (lat && lon) {
+          const label = `${v.geo?.city || "Unknown"}, ${v.geo?.country || ""}<br>IP: ${v.ip}<br>${formatTime(v.timestamp)}`;
+
+          const isGPS = v.device?.geolocation?.latitude && !v.device?.geolocation?.error;
+          const color = isGPS ? "#22c55e" : "#6366f1";
+
+          L.circleMarker([lat, lon], {
+            radius: 7, fillColor: color, color: "#fff",
+            weight: 1.5, fillOpacity: 0.85,
+          })
+            .bindPopup(label)
+            .addTo(markersLayer);
+          bounds.push([lat, lon]);
+        }
+      });
+
+      if (bounds.length) {
+        map.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
+      }
+    }
+
+    function renderVisits(visits) {
+      const container = document.getElementById("visitsContainer");
+      if (!visits.length) {
+        container.innerHTML = '<div class="empty"><div class="empty-icon">&#128065;</div><p>No visits yet</p></div>';
+        return;
+      }
+
+      container.innerHTML = visits
+        .slice()
+        .reverse()
+        .map(
+          (v, i) => `
+        <div class="visit-card">
+          <div class="visit-summary" onclick="toggleVisit(${i})">
+            <span class="visit-time">${formatTime(v.timestamp)}</span>
+            <span class="visit-ip">${v.ip}${v.vpnIndicators?.length ? '<span class="vpn-badge">VPN?</span>' : ""}</span>
+            <span class="visit-location">${[v.geo?.city, v.geo?.regionName, v.geo?.country].filter(Boolean).join(", ") || "Unknown"}</span>
+            <span class="visit-device">${parseUA(v.device?.userAgent)}</span>
+          </div>
+          <div class="visit-detail" id="visit-${i}">
+            ${renderVisitDetail(v)}
+          </div>
+        </div>`
+        )
+        .join("");
+    }
+
+    function toggleVisit(i) {
+      const el = document.getElementById("visit-" + i);
+      el.classList.toggle("open");
+    }
+
+    function renderVisitDetail(v) {
+      const d = v.device || {};
+      const g = v.geo || {};
+
+      let html = '<div class="detail-grid">';
+
+      // Location & Network
+      html += detailSection("Location & Network", {
+        "Public IP": v.ip,
+        "Country": `${g.country || "-"} (${g.countryCode || "-"})`,
+        "Region": g.regionName || "-",
+        "City": g.city || "-",
+        "District": g.district || "-",
+        "ZIP": g.zip || "-",
+        "Coordinates (IP)": g.lat && g.lon ? `${g.lat}, ${g.lon}` : "-",
+        "Continent": g.continent || "-",
+        "Timezone (IP)": g.timezone || "-",
+        "Currency": g.currency || "-",
+        "ISP": g.isp || "-",
+        "Organization": g.org || "-",
+        "AS": g.as || "-",
+        "Reverse DNS": g.reverse || "-",
+        "Mobile": g.mobile != null ? String(g.mobile) : "-",
+        "Proxy/VPN": g.proxy != null ? String(g.proxy) : "-",
+        "Hosting/DC": g.hosting != null ? String(g.hosting) : "-",
+        "VPN Indicators": v.vpnIndicators?.length ? v.vpnIndicators.join(", ") : "None",
+      });
+
+      // GPS (if available)
+      if (d.geolocation && !d.geolocation.error) {
+        html += detailSection("GPS Location (Precise)", {
+          "Latitude": d.geolocation.latitude,
+          "Longitude": d.geolocation.longitude,
+          "Accuracy": d.geolocation.accuracy ? `${Math.round(d.geolocation.accuracy)}m` : "-",
+          "Altitude": d.geolocation.altitude ? `${Math.round(d.geolocation.altitude)}m` : "-",
+          "Speed": d.geolocation.speed || "-",
+          "Heading": d.geolocation.heading || "-",
+        });
+      }
+
+      // Device
+      html += detailSection("Device & Browser", {
+        "User Agent": d.userAgent || "-",
+        "Platform": d.platform || "-",
+        "Vendor": d.vendor || "-",
+        "Language": d.language || "-",
+        "Languages": d.languages?.join(", ") || "-",
+        "CPU Cores": d.cpuCores || "-",
+        "Device Memory": d.deviceMemory ? `${d.deviceMemory} GB` : "-",
+        "Online": d.online != null ? String(d.online) : "-",
+        "Webdriver": d.webdriver != null ? String(d.webdriver) : "-",
+        "PDF Viewer": d.pdfViewer != null ? String(d.pdfViewer) : "-",
+        "Plugins": d.pluginsCount ?? "-",
+        "History Length": d.historyLength ?? "-",
+      });
+
+      // Screen
+      html += detailSection("Screen & Display", {
+        "Screen": d.screen ? `${d.screen.width}x${d.screen.height}` : "-",
+        "Available": d.screen ? `${d.screen.availWidth}x${d.screen.availHeight}` : "-",
+        "Viewport": d.viewport ? `${d.viewport.width}x${d.viewport.height}` : "-",
+        "Outer Window": d.viewport ? `${d.viewport.outerWidth}x${d.viewport.outerHeight}` : "-",
+        "Pixel Ratio": d.devicePixelRatio || "-",
+        "Color Depth": d.screen?.colorDepth || "-",
+        "Pixel Depth": d.screen?.pixelDepth || "-",
+        "Orientation": d.screen?.orientation || "-",
+      });
+
+      // Hardware
+      html += detailSection("Hardware", {
+        "GPU Vendor": d.gpu?.vendor || "-",
+        "GPU Renderer": d.gpu?.renderer || "-",
+        "WebGL Version": d.gpu?.version || "-",
+        "Shading Language": d.gpu?.shadingLang || "-",
+        "Max Texture Size": d.gpu?.maxTextureSize || "-",
+        "Max Viewport": d.gpu?.maxViewportDims?.join("x") || "-",
+        "GL Extensions": d.gpu?.extensions || "-",
+        "Audio Sample Rate": d.audio?.sampleRate || "-",
+        "Audio Channels": d.audio?.maxChannels || "-",
+        "Media Audio In": d.mediaDevices?.audioInputs ?? "-",
+        "Media Audio Out": d.mediaDevices?.audioOutputs ?? "-",
+        "Media Video In": d.mediaDevices?.videoInputs ?? "-",
+      });
+
+      // Privacy
+      html += detailSection("Privacy & Network", {
+        "Do Not Track": d.doNotTrack || "-",
+        "Cookies Enabled": d.cookieEnabled != null ? String(d.cookieEnabled) : "-",
+        "Touch Points": d.maxTouchPoints ?? "-",
+        "Local IPs (WebRTC)": d.localIPs?.join(", ") || "-",
+        "Referrer": d.referrer || "Direct",
+        "Timezone (JS)": d.timezone || "-",
+        "TZ Offset": d.timezoneOffset != null ? `UTC${d.timezoneOffset > 0 ? "-" : "+"}${Math.abs(d.timezoneOffset / 60)}` : "-",
+        "Locale": d.locale || "-",
+        "Local Time": d.localTime || "-",
+        "Canvas FP": d.canvasFingerprint || "-",
+      });
+
+      // Connection & Battery
+      html += detailSection("Connection & Battery", {
+        "Connection Type": d.connection?.type || "-",
+        "Effective Type": d.connection?.effectiveType || "-",
+        "Downlink": d.connection?.downlink ? `${d.connection.downlink} Mbps` : "-",
+        "RTT": d.connection?.rtt ? `${d.connection.rtt}ms` : "-",
+        "Save Data": d.connection?.saveData != null ? String(d.connection.saveData) : "-",
+        "Battery Level": d.battery?.level != null ? `${d.battery.level}%` : "-",
+        "Charging": d.battery?.charging != null ? String(d.battery.charging) : "-",
+      });
+
+      // Preferences
+      html += detailSection("Preferences & Features", {
+        "Color Scheme": d.preferences?.colorScheme || "-",
+        "Reduced Motion": d.preferences?.reducedMotion != null ? String(d.preferences.reducedMotion) : "-",
+        "Contrast": d.preferences?.contrast || "-",
+        "Pointer": d.preferences?.pointer || "-",
+        "Hover": d.preferences?.hover != null ? String(d.preferences.hover) : "-",
+        "Storage Quota": d.storageEstimate?.quota ? formatBytes(d.storageEstimate.quota) : "-",
+        "Storage Used": d.storageEstimate?.usage ? formatBytes(d.storageEstimate.usage) : "-",
+        "JS Heap Limit": d.memory?.jsHeapSizeLimit ? formatBytes(d.memory.jsHeapSizeLimit) : "-",
+      });
+
+      // Permissions & Features
+      const featureStr = d.features
+        ? Object.entries(d.features)
+            .filter(([, v]) => v)
+            .map(([k]) => k)
+            .join(", ")
+        : "-";
+      const permStr = d.permissions
+        ? Object.entries(d.permissions).map(([k, v]) => `${k}: ${v}`).join(", ")
+        : "-";
+      html += detailSection("Browser Capabilities", {
+        "Permissions": permStr,
+        "Supported Features": featureStr,
+      });
+
+      html += "</div>";
+
+      // Raw JSON
+      html += `<details class="raw-json"><summary>View Raw Data</summary><pre>${esc(JSON.stringify(v, null, 2))}</pre></details>`;
+
+      return html;
+    }
+
+    function detailSection(title, data) {
+      let html = `<div class="detail-section"><h4>${title}</h4>`;
+      for (const [key, val] of Object.entries(data)) {
+        const display = val === null || val === undefined || val === "" ? "-" : String(val);
+        html += `<div class="detail-row"><span class="detail-key">${key}</span><span class="detail-val">${esc(display)}</span></div>`;
+      }
+      html += "</div>";
+      return html;
+    }
+
+    function exportVisits() {
+      const blob = new Blob([JSON.stringify(currentVisits, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "visits.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // Utilities
+    function parseUA(ua) {
+      if (!ua) return "Unknown";
+      let os = "Unknown", browser = "Unknown";
+      if (/iPhone|iPad/.test(ua)) os = "iOS";
+      else if (/Android/.test(ua)) os = "Android";
+      else if (/Mac OS X/.test(ua)) os = "macOS";
+      else if (/Windows/.test(ua)) os = "Windows";
+      else if (/Linux/.test(ua)) os = "Linux";
+      else if (/CrOS/.test(ua)) os = "ChromeOS";
+
+      if (/Edg\//.test(ua)) browser = "Edge";
+      else if (/OPR\//.test(ua)) browser = "Opera";
+      else if (/Chrome\//.test(ua) && !/Edg/.test(ua)) browser = "Chrome";
+      else if (/Safari\//.test(ua) && !/Chrome/.test(ua)) browser = "Safari";
+      else if (/Firefox\//.test(ua)) browser = "Firefox";
+
+      const mobile = /Mobile|Android|iPhone/.test(ua) ? " (Mobile)" : "";
+      return `${browser} / ${os}${mobile}`;
+    }
+
+    function formatTime(iso) {
+      if (!iso) return "-";
+      const d = new Date(iso);
+      return d.toLocaleString();
+    }
+
+    function timeAgo(iso) {
+      const diff = Date.now() - new Date(iso).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return "just now";
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `${hrs}h ago`;
+      const days = Math.floor(hrs / 24);
+      return `${days}d ago`;
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes) return "0 B";
+      const k = 1024;
+      const sizes = ["B", "KB", "MB", "GB"];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+    }
+
+    function esc(s) {
+      const el = document.createElement("span");
+      el.textContent = String(s);
+      return el.innerHTML;
+    }
+
+    function toast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      setTimeout(() => el.classList.remove("show"), 2500);
+    }
+  </script>
+</body>
+</html>
